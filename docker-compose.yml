@@ -2,6 +2,7 @@ version: '3'
 
 services:
   nginx:
+    container_name: nginx
     image: nginx:1.15-alpine
     restart: unless-stopped
     volumes:
@@ -11,11 +12,22 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    networks:
+      - nginx_network
     command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+
   certbot:
+    container_name: certbot
     image: certbot/certbot
     restart: unless-stopped
+    networks:
+      - nginx_network
     volumes:
       - ./data/certbot/conf:/etc/letsencrypt
       - ./data/certbot/www:/var/www/certbot
+      - ./data/certbot/logs:/var/log/letsencrypt
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+networks:
+  nginx_network:
+    external: true

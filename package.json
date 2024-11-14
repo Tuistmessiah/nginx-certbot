@@ -1,0 +1,15 @@
+{
+    "name": "nginx-certbot",
+    "version": "1.0.0",
+    "description": "> This repository is accompanied by a [step-by-step guide on how to set up nginx and Let’s Encrypt with Docker](https://medium.com/@pentacent/nginx-and-lets-encrypt-with-docker-in-less-than-5-minutes-b4b8a60d3a71).",
+    "main": "index.js",
+    "scripts": {
+        "serve": "bash init-letsencrypt.sh",
+        "docker": "npm run docker:stop && docker-compose up -d",
+        "docker:start": "npm run docker:stop && docker-compose up --build -d",
+        "docker:stop": "docker-compose down",
+        "docker:log": "docker logs -f nginx"
+    },
+    "author": "",
+    "license": "ISC"
+}

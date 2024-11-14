@@ -1,15 +1,30 @@
 #!/bin/bash
 
+# Load environment variables from .env
+if [ -f .env ]; then
+  set -a  # Automatically export all variables
+  . .env  # Source the .env file
+  set +a
+else
+  echo "Error: .env file not found."
+  exit 1
+fi
+
+IFS=' ' read -r -a domains <<< "$DOMAINS"
+echo "Using the following domains: ${domains[@]}"
+
+
 if ! [ -x "$(command -v docker-compose)" ]; then
   echo 'Error: docker-compose is not installed.' >&2
   exit 1
 fi
 
-domains=(example.org www.example.org)
+# domains=(project-olives.codebreeze.org www.project-olives.codebreeze.org)
+# domains=(port-world.codebreeze.org www.port-world.codebreeze.org)
 rsa_key_size=4096
 data_path="./data/certbot"
-email="" # Adding a valid address is strongly recommended
-staging=0 # Set to 1 if you're testing your setup to avoid hitting request limits
+email="$EMAIL"
+staging="$STAGING" # Set to 1, to avoid hitting request limits (developing)
 
 if [ -d "$data_path" ]; then
   read -p "Existing data found for $domains. Continue and replace existing certificate? (y/N) " decision
