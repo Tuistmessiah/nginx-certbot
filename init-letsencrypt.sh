@@ -1,5 +1,63 @@
 #!/bin/bash
 
+# * - - Generating nginx conf file
+
+export $(grep -v '^#' .env.nginx | xargs)
+
+# Clear any existing nginx.conf
+> data/nginx/conf.d/nginx.conf
+
+for i in {1..20}; do
+  site_domain_var="SITE_${i}_DOMAIN"
+  site_container_var="SITE_${i}_CONTAINER"
+  site_port_var="SITE_${i}_PORT"
+  site_port_mapped_var="SITE_${i}_PORT_MAPPED"
+
+  # Check if the site SITE_X_DOMAIN exist
+  if [ -z "${!site_domain_var}" ]; then
+    break
+  fi
+
+  export SITE_DOMAIN="${!site_domain_var}"
+  export SITE_CONTAINER="${!site_container_var}"
+  export SITE_PORT="${!site_port_var}"
+  export SITE_PORT_MAPPED="${!site_port_mapped_var}" 
+
+  # Populate nginx.conf
+  echo "# * Website: ${SITE_CONTAINER} - ${SITE_PORT_MAPPED}:${SITE_PORT}" >> data/nginx/conf.d/nginx.conf
+  echo "# * ${SITE_DOMAIN}" >> data/nginx/conf.d/nginx.conf
+  echo "" >> data/nginx/conf.d/nginx.conf
+  
+  envsubst < data/nginx/server_block_template.conf >> data/nginx/conf.d/nginx.conf
+  echo "" >> data/nginx/conf.d/nginx.conf
+done
+
+# Replace placeholders with actual Nginx variables
+sed -i 's/__HOST__/$host/g' data/nginx/conf.d/nginx.conf
+sed -i 's/__REQUEST_URI__/$request_uri/g' data/nginx/conf.d/nginx.conf
+sed -i 's/__HTTP_HOST__/$http_host/g' data/nginx/conf.d/nginx.conf
+sed -i 's/__REMOTE_ADDR__/$remote_addr/g' data/nginx/conf.d/nginx.conf
+sed -i 's/__PROXY_ADD_X_FORWARDED_FOR__/$proxy_add_x_forwarded_for/g' data/nginx/conf.d/nginx.conf
+
+# * - - Setup nginx
+
+# Check if docker-compose is installed
+if ! [ -x "$(command -v docker-compose)" ]; then
+  echo 'Error: docker-compose is not installed.' >&2
+  exit 1
+fi
+
+echo "### Restarting nginx ..."
+docker-compose down
+docker-compose up --force-recreate -d nginx
+echo
+
+
+
+# * - - Creating Certificates
+
+# > - Get .env variables
+
 # Load environment variables from .env
 if [ -f .env ]; then
   set -a  # Automatically export all variables
@@ -13,14 +71,6 @@ fi
 IFS=' ' read -r -a domains <<< "$DOMAINS"
 echo "Using the following domains: ${domains[@]}"
 
-
-if ! [ -x "$(command -v docker-compose)" ]; then
-  echo 'Error: docker-compose is not installed.' >&2
-  exit 1
-fi
-
-# domains=(project-olives.codebreeze.org www.project-olives.codebreeze.org)
-# domains=(port-world.codebreeze.org www.port-world.codebreeze.org)
 rsa_key_size=4096
 data_path="./data/certbot"
 email="$EMAIL"
@@ -33,63 +83,39 @@ if [ -d "$data_path" ]; then
   fi
 fi
 
+# > - Install certificates (loop domains)
 
-if [ ! -e "$data_path/conf/options-ssl-nginx.conf" ] || [ ! -e "$data_path/conf/ssl-dhparams.pem" ]; then
-  echo "### Downloading recommended TLS parameters ..."
-  mkdir -p "$data_path/conf"
-  curl -s https://raw.githubusercontent.com/certbot/certbot/master/certbot-nginx/certbot_nginx/_internal/tls_configs/options-ssl-nginx.conf > "$data_path/conf/options-ssl-nginx.conf"
-  curl -s https://raw.githubusercontent.com/certbot/certbot/master/certbot/certbot/ssl-dhparams.pem > "$data_path/conf/ssl-dhparams.pem"
-  echo
-fi
+# for domain in "${domains[@]}"; do
+#   echo "Processing domain: $domain"
+#   read -p "Proceed with certificate? (y/N) " decision
+#   if [ "$decision" != "Y" ] && [ "$decision" != "y" ]; then
+#     exit
+#   fi
+  
+#   # Create dummy certificate
+#   path="/etc/letsencrypt/live/$domain"
+#   mkdir -p "$data_path/conf/live/$domain"
+# #   docker-compose run --rm --entrypoint "\
+# #     openssl req -x509 -nodes -newkey rsa:$rsa_key_size -days 1\
+# #       -keyout '$path/privkey.pem' \
+# #       -out '$path/fullchain.pem' \
+# #       -subj '/CN=localhost'" certbot
+  
+#   # Request the actual certificate
+# #   docker-compose run --rm --entrypoint "\
+# #     certbot certonly --webroot -w /var/www/certbot \
+# #       $staging_arg \
+# #       $email_arg \
+# #       -d $domain \
+# #       --rsa-key-size $rsa_key_size \
+# #       --agree-tos \
+# #       --force-renewal" certbot
+# done
 
-echo "### Creating dummy certificate for $domains ..."
-path="/etc/letsencrypt/live/$domains"
-mkdir -p "$data_path/conf/live/$domains"
-docker-compose run --rm --entrypoint "\
-  openssl req -x509 -nodes -newkey rsa:$rsa_key_size -days 1\
-    -keyout '$path/privkey.pem' \
-    -out '$path/fullchain.pem' \
-    -subj '/CN=localhost'" certbot
-echo
-
-
-echo "### Starting nginx ..."
-docker-compose up --force-recreate -d nginx
-echo
-
-echo "### Deleting dummy certificate for $domains ..."
-docker-compose run --rm --entrypoint "\
-  rm -Rf /etc/letsencrypt/live/$domains && \
-  rm -Rf /etc/letsencrypt/archive/$domains && \
-  rm -Rf /etc/letsencrypt/renewal/$domains.conf" certbot
-echo
-
-
-echo "### Requesting Let's Encrypt certificate for $domains ..."
-#Join $domains to -d args
-domain_args=""
-for domain in "${domains[@]}"; do
-  domain_args="$domain_args -d $domain"
-done
-
-# Select appropriate email arg
-case "$email" in
-  "") email_arg="--register-unsafely-without-email" ;;
-  *) email_arg="--email $email" ;;
-esac
-
-# Enable staging mode if needed
-if [ $staging != "0" ]; then staging_arg="--staging"; fi
-
-docker-compose run --rm --entrypoint "\
-  certbot certonly --webroot -w /var/www/certbot \
-    $staging_arg \
-    $email_arg \
-    $domain_args \
-    --rsa-key-size $rsa_key_size \
-    --agree-tos \
-    --force-renewal" certbot
-echo
+# > - Reload to apply certificates
 
 echo "### Reloading nginx ..."
 docker-compose exec nginx nginx -s reload
+echo
+
+docker ps
