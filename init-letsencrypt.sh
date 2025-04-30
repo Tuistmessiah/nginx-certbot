@@ -39,6 +39,8 @@ sed -i 's/__HTTP_HOST__/$http_host/g' data/nginx/conf.d/nginx.conf
 sed -i 's/__REMOTE_ADDR__/$remote_addr/g' data/nginx/conf.d/nginx.conf
 sed -i 's/__PROXY_ADD_X_FORWARDED_FOR__/$proxy_add_x_forwarded_for/g' data/nginx/conf.d/nginx.conf
 
+
+
 # * - - Setup nginx
 
 # Check if docker-compose is installed

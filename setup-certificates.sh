@@ -9,6 +9,12 @@ echo
 echo "RUNNING: setup-certificates.sh -------------------------------------------------- "
 echo
 
+echo "This script reads '.env' and will attempt to install a certificate for each listed domain. It restarts 'nginx' container."
+
+echo
+echo " ------------------------------ -------------------------------------------------- "
+echo
+
 # * - - Creating Certificates
 
 # Load environment variables from .env
